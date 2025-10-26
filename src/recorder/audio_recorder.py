@@ -109,6 +109,18 @@ class AudioRecorder:
 
         if transcript:
             print(f"Transcript: {transcript}")
+
+            import json
+            transcript_file = self.output_dir/f"transcript_{audio_file.stem}.json"
+            transcript_data = {
+                "audio_file": str(audio_file),
+                "transcript": transcript,
+                "timestamp": datetime.now().isoformat()
+            }
+            with open(transcript_file, 'w') as f:
+                json.dump(transcript_data, f, indent=2)
+            
+            print(f"Saved transcript to {transcript_file}")
         else:
             print("No speech detected")
 
