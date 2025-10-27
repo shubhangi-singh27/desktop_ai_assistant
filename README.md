@@ -24,8 +24,8 @@ A privacy-first desktop automation assistant that learns from your actions and s
 
 1. Clone the repository:
 ```bash
-git clone <your-repo-url>
-cd desktop_assistant
+git clone https://github.com/shubhangi-singh27/desktop_ai_assistant
+cd desktop_ai_assistant
 ```
 
 2. Install dependencies:
