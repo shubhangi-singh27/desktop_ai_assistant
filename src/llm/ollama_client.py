@@ -59,41 +59,31 @@ class OllamaClient:
             timeline += f" in {step.get('window', '')}"
             previous_window = current_window
         
-        prompt = f"""You are analyzing a user's desktop activity to identify automation opportunities.
+        prompt = f"""You are an **automation analysis assistant**.
+            Analyze the user's desktop activity log below and suggest realistic automations.
 
-    IMPORTANT: Read the timeline SEQUENTIALLY to understand the COMPLETE WORKFLOW.
+            === ACTIVITY TIMELINE ===
+            {timeline}
 
-    Activity Timeline:
-    {timeline}
+            === TASK ===
+            1. Understand what overall task the user is trying to complete.
+            2. Identify any repeated sequences or multi-step workflows.
+            3. Suggest specific automations that could save time or reduce manual effort.
+            - Focus on automations that are possible using common desktop tools (Excel, browser, etc.).
+            - Avoid generic advice. Suggest concrete steps.
 
-    Based on above timeline, perform the following analysis and generate suggestions for automation.
-    ANALYSIS INSTRUCTIONS:
-    1. Read ALL events from start to finish to understand the complete workflow
-    2. Group related actions together (e.g., "user is entering data in Excel")
-    3. Identify SEQUENTIAL PATTERNS that repeat (not just individual repeated clicks)
-    4. Understand the USER'S INTENT from the sequence of actions
-    5. Think about what the user is trying to accomplish as a whole
+            === OUTPUT FORMAT ===
+            USER GOAL:
+            [Brief and specific goal statement]
 
-    EXAMPLES OF GOOD DETECTION:
-    - "User switches between Excel and Browser repeatedly to copy-paste data" (identifies cross-app workflow)
-    - "User fills a form by clicking same fields repeatedly" (identifies data entry pattern)
-    - "User performs the same sequence of clicks in Excel multiple times" (identifies repetitive workflow)
+            REPEATING PATTERNS:
+            - [Pattern 1: concise description of repeated behavior]
+            - [Pattern 2: another repeated sequence, if any]
 
-    Format your response as:
-
-    USER'S MAIN WORKFLOW:
-    [Describe what the user is trying to accomplish - be specific]
-
-    REPETITIVE SEQUENCES DETECTED:
-    - [Pattern 1: specific sequence that repeats]
-    - [Pattern 2: another sequence]
-
-    AUTOMATION SUGGESTIONS:
-    > "Detected repetitive workflow: [specific sequence]. This can be automated by [solution]."
-
-    Be specific about the COMPLETE SEQUENCE, not just individual actions.
-
-    Response:"""
+            AUTOMATION IDEAS:
+            - [Automation 1: what can be automated + how (macro/script/workflow)]
+            - [Automation 2: another possible automation]
+            """
     
         return prompt
     

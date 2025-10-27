@@ -131,9 +131,24 @@ class EventTracker:
 
             screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
 
+            from PIL import ImageEnhance, ImageFilter
+
+            screenshot = screenshot.convert('L')
+
+            enhancer = ImageEnhance.Contrast(screenshot)
+            screenshot = enhancer.enhance(2.0)
+
+            screenshot = screenshot.filter(ImageFilter.SHARPEN)
+
+            screenshot = screenshot.resize(
+                (screenshot.width * 2, screenshot.height * 2),
+                Image.LANCZOS
+            )
+
             text = pytesseract.image_to_string(
                 screenshot, 
                 lang='eng',
+                config='--psm 7'
                 # config='--psm 8 -c tessedict_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_'
             )
             text = text.strip().replace('\n', '')
