@@ -97,6 +97,48 @@ class ActivityAnalyzer:
 
         return steps
 
+    def detect_patterns_hybrid(self, events: List[Dict]) -> List[str]:
+        suggestions = []
+
+        actions = []
+        windows = []
+
+        for event in events:
+            action_type = event.get('type', '')
+            window = event.get('window', 'unknown')
+
+            if action_type == "mouse_click":
+                element = event.get('clicked_element', '')
+                if element:
+                    actions.append(f"{window}: {element}")
+                else:
+                    actions.append(f"{windows}: click")
+            if action_type == 'key_press':
+                key = event.get('key', '')
+                actions.append(f"{window}: {key}")
+
+            windows.append(window)
+
+        from collections import Counter
+        action_counts = Counter(actions)
+
+        for action, count in action_counts.items():
+            if count >= 3:
+                windows, detail = action.split(':', 1)
+                suggestions.append(
+                    f"Detected repetitive action: {windows} - {detail} ({count} times)"
+                    f"This can be automated."
+                )
+            
+        unique_windows = [w for w in windows if w and w != 'unknown']
+        if len(set(unique_windows)) >= 2:
+            suggestions.append(
+                f"Detected workflow spanning multiple apps: {', '.join(set(unique_windows))}."
+                f"Data flow between these applications can be automated."
+            )
+        
+        return suggestions
+
 if __name__ == "__main__":
     print("Activity Analyser Test")
 

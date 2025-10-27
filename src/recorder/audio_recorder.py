@@ -117,7 +117,7 @@ class AudioRecorder:
                 "transcript": transcript,
                 "timestamp": datetime.now().isoformat()
             }
-            with open(transcript_file, 'w') as f:
+            with open(transcript_file, 'w', encoding='utf-8') as f:
                 json.dump(transcript_data, f, indent=2)
             
             print(f"Saved transcript to {transcript_file}")

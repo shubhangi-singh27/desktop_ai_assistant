@@ -27,6 +27,8 @@ class EventTracker:
         self.mouse_listener = None
         self.keyboard_listener = None
 
+        self.pressed_modifiers = set()
+
         # Mouse position and threshold to track position
         self.last_mouse_x = None
         self.last_mouse_y = None
@@ -96,10 +98,11 @@ class EventTracker:
         self.last_mouse_x = x
         self.last_mouse_y = y
 
-        self._log_event("mouse_move", {
+        """self._log_event("mouse_move", {
             "x": x,
             "y": y,
-        })
+        })"""
+        return
 
     def _on_mouse_scroll(self, x, y, dx, dy):
         """To handle mouse scroll event"""
@@ -117,10 +120,14 @@ class EventTracker:
 
         try:
             # Capture small area around the click
-            left = max(0, x-self.ocr_crop_size//2)
-            top = max(0, y-self.ocr_crop_size//2)
-            right = x + self.ocr_crop_size//2
-            bottom = y + self.ocr_crop_size//2
+            left = max(0, x-150)
+            top = max(0, y-40)
+            right = x + 150
+            bottom = y - 10
+
+            if top >= bottom:
+                top = max(0, y - 40)
+                bottom = y + 10
 
             screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
 
@@ -142,12 +149,69 @@ class EventTracker:
         try:
             key_str = key.char
 
+            if key_str and ord(key_str) < 32:
+                control_chars = {
+                    1: 'Ctrl+A', 3: 'Ctrl+C', 6:'Ctrl+F', 22: 'Ctrl+V', 
+                    24: 'Ctrl+X', 26: 'Ctrl+Z'
+                }
+                key_str = control_chars.get(ord(key_str))
         except AttributeError:
             key_str = str(key).replace("Key.", "")
 
-        self._log_event("key_press", {
-            "key": key_str
-        })
+        if key_str in ['ctrl_l', 'alt_l', 'shift_l', 'ctrl_r', 'alt_r', 'shift_r']:
+            self.pressed_modifiers.add(key_str)
+            return
+        
+        if self.pressed_modifiers:
+            modifiers = []
+            if any('ctrl' in m for m in self.pressed_modifiers):
+                modifiers.append('Ctrl')
+
+            if any('alt' in m for m in self.pressed_modifiers):
+                modifiers.append('Alt')
+
+            if any('shift' in m for m in self.pressed_modifiers):
+                modifiers.append('Shift')
+
+            shortcut = f"{', '.join(modifiers)} + {key_str}"
+
+            common_shortcuts = {
+                'Ctrl+A': 'Select All',
+                'Ctrl+C': 'Copy',
+                'Ctrl+V': 'Paste',
+                'Ctrl+X': 'Cut',
+                'Ctrl+Z': 'Undo',
+                'Ctrl+Y': 'Redo',
+                'Alt+Tab': 'Switch tab',
+                'Ctrl+N': 'New',
+                'Ctrl+O': 'Open'
+            }
+            if shortcut.lower() in common_shortcuts:
+                action = common_shortcuts[shortcut.lower()]
+                self._log_event("key_press",{
+                    "key": f"{shortcut} {action}"
+                })
+            else:
+                self._log_event("key_press", {
+                    "key": shortcut
+                })
+            
+            self.pressed_modifiers.clear()
+            return
+
+        if key_str:
+            self._log_event("key_press", {
+                "key": key_str.encode('ascii', errors='ignore').decode('ascii')
+            })
+
+    def _on_key_release(self, key):
+        try:
+            key_str = str(key).replace("Key.", "")
+            if key_str in ['ctrl_l', 'alt_l', 'shift_l', 'ctrl_r', 'alt_r', 'shift_r']:
+                self.pressed_modifiers.discard(key_str)
+            
+        except:
+            pass
 
     def _save_events(self):
         """Save events to a JSON file"""
@@ -160,7 +224,7 @@ class EventTracker:
         existing_events = []
         if filepath.exists():
             try:
-                with open(filepath, "r") as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     existing_events = json.load(f)
             except:
                 pass
@@ -168,7 +232,7 @@ class EventTracker:
         # Add all events to one list
         all_events = existing_events + self.events
 
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(all_events, f, indent=2)
 
         print(f"Saved {len(self.events)} events.")
@@ -192,7 +256,8 @@ class EventTracker:
         self.mouse_listener.start()
 
         self.keyboard_listener = keyboard.Listener(
-            on_press=self._on_key_press
+            on_press=self._on_key_press,
+            on_release=self._on_key_release        
         )
         self.keyboard_listener.start()
 
