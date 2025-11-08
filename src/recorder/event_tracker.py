@@ -1,12 +1,14 @@
 import json
 import time
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
 from pynput import mouse, keyboard
 import pygetwindow as gw
-from PIL import Image, ImageGrab
 import pytesseract
+from PIL import Image,ImageGrab
+import uiautomation as auto
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
@@ -65,24 +67,62 @@ class EventTracker:
         if len(self.events) >= self.max_events_before_save:
             self._save_events()
 
+    def _get_element_at_point(self, x, y):
+        try:
+            with auto.UIAutomationInitializerInThread():
+                element = auto.ControlFromPoint(x, y)
+
+                if not element:
+                    return None, None
+
+                info = {
+                    "name": element.Name,
+                    "control_type": element.ControlTypeName,
+                    "automation_id": element.AutomationId,
+                    "class_name": element.ClassName
+                }
+
+                rect = getattr(element, "BoundingRectangle", None)
+                if rect: 
+                    info["rectangle"] = [rect.left, rect.top, rect.right, rect.bottom]
+                
+                friendly = None
+                if info["name"]:
+                    friendly = info["name"]
+                    if info["control_type"] and info["control_type"] not in {'Button', 'MenuItem'}:
+                        friendly = f"{info['control_type']}: {friendly}"
+                elif info["control_type"]:
+                    friendly = info["control_type"]
+                    if info["class_name"]:
+                        friendly = f"{friendly}({info['class_name']})"
+                    
+                return friendly, info
+        
+        except Exception as e:
+            print(f"UIA lookup failed: {e}")
+            return None, None
+
     def _on_mouse_click(self, x, y, button, pressed):
-        """To handle mouse click event"""
         if not pressed:
             return
-
+            
         clicked_element = None
-        if self.ocr_enabled:
-            clicked_element = self._extract_text_near_click(x, y)
-        
+
+        label, element_info = self._get_element_at_point(x, y)
+
         event_data = {
             "x": x,
             "y": y,
             "button": str(button)
         }
 
-        if clicked_element:
-            event_data["clicked_element"] = clicked_element
-
+        if element_info:
+            event_data["element"] = element_info
+        if label:
+            event_data["clicked_element"] = label
+        else:
+            event_data["clicked_element"] = f"Position({x}, {y})"
+        
         self._log_event("mouse_click", event_data)
 
     def _on_mouse_move(self, x, y):
@@ -112,6 +152,25 @@ class EventTracker:
             "delta_x": dx,
             "delta_y": dy
         })
+
+    def _clean_ocr_text(self, text):
+        if not text:
+            return None
+        text = text.strip().replace('\n', ' ').replace('\r', '')
+
+        text = re.sub(r'[^\w\s\-_.]', '', text)
+
+        if not text:
+            return None
+
+        alphanumeric_count = sum(c.isalnum() for c in text)
+        total_chars = len(text)
+        alphanumeric_ratio = alphanumeric_count / total_chars if total_chars > 0 else 0
+
+        if alphanumeric_ratio < 0.5:
+            return None
+
+        return text if len(text) > 1 else None
     
     def _extract_text_near_click(self, x, y):
         """Extract text from screenshot near click location using OCR"""
@@ -120,14 +179,10 @@ class EventTracker:
 
         try:
             # Capture small area around the click
-            left = max(0, x-150)
-            top = max(0, y-40)
-            right = x + 150
-            bottom = y - 10
-
-            if top >= bottom:
-                top = max(0, y - 40)
-                bottom = y + 10
+            left = max(0, x-100)
+            top = max(0, y-50)
+            right = x + 100
+            bottom = y + 5
 
             screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
 
@@ -145,15 +200,26 @@ class EventTracker:
                 Image.LANCZOS
             )
 
-            text = pytesseract.image_to_string(
-                screenshot, 
-                lang='eng',
-                config='--psm 7'
-                # config='--psm 8 -c tessedict_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_'
-            )
-            text = text.strip().replace('\n', '')
+            ocr_configs = [
+                '--psm 8',
+                '--psm 7',
+                '--psm 11',
+                '--psm 13'
+            ]
+            best_text = None
+            for config in ocr_configs:
+                text = pytesseract.image_to_string(
+                    screenshot, 
+                    lang='eng',
+                    config=config
+                )
+                cleaned_text = self._clean_ocr_text(text)
 
-            return text if text else None
+                if cleaned_text:
+                    best_text = cleaned_text
+                    break
+
+            return best_text
         
         except Exception as e:
             print(f"OCR error: {e}")
@@ -188,7 +254,12 @@ class EventTracker:
             if any('shift' in m for m in self.pressed_modifiers):
                 modifiers.append('Shift')
 
-            shortcut = f"{', '.join(modifiers)} + {key_str}"
+            """key_str = key.upper() if len(key) == 1 else key
+            combo = "+".join(modifiers + [key_str])
+            self._log_event("key_press", {
+                "key": combo 
+            })"""
+            shortcut = f"{'+'.join(modifiers)} + {key_str}"
 
             common_shortcuts = {
                 'Ctrl+A': 'Select All',
@@ -201,8 +272,9 @@ class EventTracker:
                 'Ctrl+N': 'New',
                 'Ctrl+O': 'Open'
             }
-            if shortcut.lower() in common_shortcuts:
-                action = common_shortcuts[shortcut.lower()]
+            shortcut_clean = shortcut.replace(' ', '')
+            if shortcut_clean in common_shortcuts:
+                action = common_shortcuts[shortcut]
                 self._log_event("key_press",{
                     "key": f"{shortcut} {action}"
                 })
@@ -303,11 +375,12 @@ if __name__ == "__main__":
     print("Move, scroll, click, press key on keyboard for 10 seconds.")
     time.sleep(2)
 
+    track_time = 60
     tracker = EventTracker()
     tracker.start()
-    print("Tracking for 20 seconds")
+    print(f"Tracking for {track_time} seconds")
 
-    time.sleep(20)
+    time.sleep(track_time)
 
     tracker.stop()
 

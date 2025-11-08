@@ -17,6 +17,24 @@ class ActivityAnalyzer:
         self.events_dir.mkdir(parents=True, exist_ok=True)
         self.audio_dir.mkdir(parents=True, exist_ok=True)
 
+    def _build_click_summary(self, event, label, element_info):
+        window = event.get("window", "Unknown window")
+        if label:
+            return f"Clicked '{label}' in {window}"
+        if element_info.get("control_type"):
+            return f"Clicked {element_info['control_type']} in {window}"
+        return f"Mouse click in {window}"
+
+    def _build_key_summary(self, event):
+        key = event.get("key", "Unknown key")
+        window = event.get("window", "Unknown window")
+        if '+' in key:
+            return f"Used shortcut: {key} in {window}"
+        if len(key) == 1:
+            return f"Typed: {key} in {window}"
+        return f"Pressed '{key}' in {window}"
+
+
     def load_events(self, session_id=None):
         event_files = list(self.events_dir.glob("events_*.json"))
 
@@ -77,23 +95,79 @@ class ActivityAnalyzer:
     
     def _analyze_workflow_steps(self, events: List[Dict]) -> List[Dict]:
         steps = []
+        pending_keys = []
+        pending_window = None
+        pending_element = None
+        pending_start = None
 
-        for event in events:
+        def flush_pending_keys():
+            nonlocal pending_keys, pending_window, pending_element, pending_start
+            if not pending_keys:
+                return
+            key_text = " ".join(pending_keys)
             step = {
-                "timestamp": event.get("timestamp"),
-                "window": event.get("window"),
-                "action_type": event.get("type")
+                'timestamp': pending_start,
+                'window': pending_window or "Unknown window",
+                'action_type': 'key_press',
+                'keys': pending_keys[:],
+                'summary': f"Typed: {key_text} in {pending_window or 'Unknown window'}"
             }
-
-            if event.get("type") == "mouse_click":
-                step["click_location"] = {"x": event.get("x"), "y": event.get("y")}
-                if "clicked_element" in event:
-                    step["clicked_element"] = event.get("clicked_element")
-
-            elif event.get("type") == "key_press":
-                step["key"] = event.get("key")
+            if pending_element:
+                step['element'] = pending_element
 
             steps.append(step)
+            pending_keys = []
+            pending_window = None
+            pending_element = None
+            pending_start = None
+
+        for event in events:
+            action_type = event.get("type")
+            window = event.get("window")
+
+            if action_type != "key_press":
+                flush_pending_keys()
+
+            if action_type == "mouse_click":
+                element_info = event.get("element") or {}
+                label = event.get("clicked_element") or element_info.get("name")
+                steps.append({
+                    'timestamp': event.get("timestamp"),
+                    'window': window,
+                    'action_type': 'mouse_click',
+                    'click': {
+                        "location": {"x": event.get("x"), "y": event.get("y")},
+                        "label": label,
+                        "element": element_info
+                    },
+                    'summary': self._build_click_summary(event, label, element_info)
+                })
+                pending_element = element_info or None
+
+            elif action_type == "key_press":
+                key = event.get("key")
+                if not key:
+                    continue
+                if not pending_keys:
+                    pending_window = window
+                    pending_start = event.get("timestamp")
+                    pending_element = event.get("element") or None
+                elif window != pending_window:
+                    flush_pending_keys()
+                    pending_window = window
+                    pending_start = event.get("timestamp")
+                    pending_element = event.get("element") or None
+
+                pending_keys.append(key)
+            else:
+                steps.append({
+                    'timestamp': event.get("timestamp"),
+                    'window': window,
+                    'action_type': action_type,
+                    'summary': f"{action_type or 'event'} recorded"
+                })
+            
+        flush_pending_keys()
 
         return steps
 

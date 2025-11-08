@@ -7,11 +7,18 @@ from src.recorder.event_tracker import EventTracker
 from src.recorder.audio_recorder import AudioRecorder
 from src.analyzer.activity_analyzer import ActivityAnalyzer
 from src.llm.ollama_client import OllamaClient
+from src.utils.data_cleaner import clear_all_data
 
 def main():
     print("="*60)
     print("Desktop AI Assistant - Recording Session")
     print("="*60)
+
+    print("Do you want old recorded data to be deleted?")
+    choice = input("Enter 'yes' to delete, or press Enter to keep them: ")
+    if choice.lower() == 'yes':
+        clear_all_data(confirm=False)
+        print()
 
     RECORDING_DURATION = 180
 

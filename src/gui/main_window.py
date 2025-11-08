@@ -66,6 +66,17 @@ class MainWindow:
         )
         self.stop_button.pack(side="left", padx=10)
 
+        self.clear_data_button = ctk.CTkButton(
+            button_frame,
+            text="Clear Data", 
+            command=self.clear_data,
+            width=150, 
+            height=40,
+            fg_color="red",
+            hover_color="darkred"
+        )
+        self.clear_data_button.pack(side="left", padx=10)
+
         # Suggestions
         suggestions_label = ctk.CTkLabel(
             self.root,
@@ -171,6 +182,21 @@ class MainWindow:
             self.status_label.configure(text=f"Analysis error: {str(e)}")
             self.start_button.configure(state="normal")
             self.stop_button.configure(state="disabled")
+
+    def clear_data(self):
+        dialog = ctk.CTkInputDialog(
+            text="Type 'DELETE' to confirm deletion of data: ",
+            title="Confirm Data Deletion"
+        )
+        response = dialog.get_input()
+
+        if response == "DELETE":
+            from utils.data_cleaner import clear_all_data
+            clear_all_data(confirm=False)
+            self.status_label.configure(text="Data deleted successfully!")
+            self.suggestions_text.delete("1.0", "end")
+        else:
+            self.status_label.configure(text="Deletion cancelled.")
     
 
     def run(self):
